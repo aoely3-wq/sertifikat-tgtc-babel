@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Award, Home, Search, ShieldCheck } from 'lucide-react';
+import { Award, Home, Search, ShieldCheck, QrCode } from 'lucide-react';
 
 export default function Navbar() {
   const pathname = usePathname();
@@ -52,6 +52,18 @@ export default function Navbar() {
             >
               <Search className="w-4 h-4" />
               <span>Cari Sertifikat</span>
+            </Link>
+
+            <Link
+              href="/qrcode"
+              className={`flex items-center space-x-1 px-3 py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors ${
+                pathname === '/qrcode'
+                  ? 'bg-amber-400 text-slate-900 font-semibold shadow-inner'
+                  : 'text-amber-300 hover:bg-white/10 hover:text-amber-200'
+              }`}
+            >
+              <QrCode className="w-4 h-4" />
+              <span>QR Code Peserta</span>
             </Link>
 
             {/* Khusus jika sedang berada di halaman /admin, tampilkan badge Admin */}
