@@ -27,14 +27,15 @@ export async function generateCertificatePdf(
 
   // Embed standard fonts
   const fontTitle = await pdfDoc.embedFont(StandardFonts.TimesRomanBold);
-  const fontName = await pdfDoc.embedFont(StandardFonts.TimesRomanBold);
+  const fontName = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
   const fontSans = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const fontSansBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
   const fontItalic = await pdfDoc.embedFont(StandardFonts.TimesRomanItalic);
 
-  // Check custom template existence
-  const templatePath = path.join(process.cwd(), 'public', settings.customTemplatePath || 'templates/certificate-template.png');
-  const hasCustomTemplate = fs.existsSync(templatePath);
+  // Check custom template existence (sanitize leading slashes for cross-platform Windows compatibility)
+  const cleanTemplatePath = (settings.customTemplatePath || 'templates/certificate-template.jpeg').replace(/^[/\\]+/, '');
+  const templatePath = path.join(process.cwd(), 'public', cleanTemplatePath);
+  const hasCustomTemplate = (settings.useCustomTemplate ?? true) && fs.existsSync(templatePath);
 
   // Generate QR Code data URL
   const verifyUrl = `${baseUrl}/verify/${participant.id}`;
@@ -64,60 +65,71 @@ export async function generateCertificatePdf(
       height: pageHeight,
     });
 
-    // Nomor Sertifikat
-    const certNumY = pageHeight * (1 - (settings.certNumberPositionY || 38) / 100);
-    const certNumText = `Nomor: ${participant.certNumber}`;
-    const certNumWidth = fontSans.widthOfTextAtSize(certNumText, 11);
-    page.drawText(certNumText, {
-      x: (pageWidth - certNumWidth) / 2,
+    // Nomor Sertifikat (Ditempatkan presisi di atas garis "NO: ____________", ukuran disetarakan dengan teks "NO :")
+    const certNumSize = 17.5;
+    const certNumY = pageHeight * (1 - (settings.certNumberPositionY || 35.4) / 100);
+    // Jika format nomor sudah ada kata "Nomor:", bersihkan agar tidak dobel dengan "NO:" pada template
+    const rawCertNum = participant.certNumber || '';
+    const cleanCertNum = rawCertNum.replace(/^Nomor:\s*/i, '');
+    const certNumWidth = fontSansBold.widthOfTextAtSize(cleanCertNum, certNumSize);
+    // Garis nomor berada di sekitar 52.3% dari lebar lembar
+    const certNumX = (pageWidth * 0.523) - (certNumWidth / 2);
+    page.drawText(cleanCertNum, {
+      x: Math.max(20, certNumX),
       y: certNumY,
-      size: 11,
-      font: fontSans,
-      color: rgb(0.2, 0.25, 0.35),
+      size: certNumSize,
+      font: fontSansBold,
+      color: rgb(0.08, 0.12, 0.2),
     });
 
-    // Nama Peserta
-    const nameSize = settings.nameFontSize || 34;
-    const nameY = pageHeight * (1 - (settings.namePositionY || 50) / 100);
-    const nameWidth = fontName.widthOfTextAtSize(participant.name, nameSize);
+    // Nama Peserta (Ditempatkan di atas garis biru tengah)
+    const nameSize = settings.nameFontSize || 26;
+    const nameY = pageHeight * (1 - (settings.namePositionY || 45.8) / 100);
+    const nameWidth = fontSansBold.widthOfTextAtSize(participant.name, nameSize);
     const nameColor = hexToRgb(settings.nameColor || '#0F2B5C');
 
     page.drawText(participant.name, {
       x: (pageWidth - nameWidth) / 2,
       y: nameY,
       size: nameSize,
-      font: fontName,
+      font: fontSansBold,
       color: nameColor,
     });
 
-    // Instansi / Kampus (jika ada)
+    // Instansi / Kampus (Ditempatkan di atas garis kedua)
     if (participant.institution) {
       const instText = participant.institution;
-      const instWidth = fontItalic.widthOfTextAtSize(instText, 14);
+      const instSize = 13;
+      const instWidth = fontSans.widthOfTextAtSize(instText, instSize);
+      const instY = pageHeight * (1 - 0.512);
       page.drawText(instText, {
         x: (pageWidth - instWidth) / 2,
-        y: nameY - 22,
-        size: 14,
-        font: fontItalic,
-        color: rgb(0.3, 0.35, 0.4),
+        y: instY,
+        size: instSize,
+        font: fontSans,
+        color: rgb(0.2, 0.25, 0.35),
       });
     }
 
-    // Embed QR Code verifikasi di tengah bawah secara elegan
-    const qrSize = 65;
+    // Catatan: Tanda tangan, nama penandatangan (Rektor UBB & Kepala Kanwil DJPb),
+    // serta cap kedinasan sudah melekat permanen pada file template (certificate-template.jpeg).
+    // Sehingga tidak perlu dicetak ulang agar tanda tangan dan cap scan asli tetap jernih dan otentik.
+
+    // Embed QR Code verifikasi di tengah bawah secara elegan (di antara kedua penandatangan)
+    const qrSize = 50;
     page.drawImage(qrImage, {
       x: (pageWidth - qrSize) / 2,
-      y: 45,
+      y: 52,
       width: qrSize,
       height: qrSize,
     });
 
     const scanText = 'Scan Keabsahan Digital';
-    const scanWidth = fontSans.widthOfTextAtSize(scanText, 8);
+    const scanWidth = fontSans.widthOfTextAtSize(scanText, 7);
     page.drawText(scanText, {
       x: (pageWidth - scanWidth) / 2,
-      y: 35,
-      size: 8,
+      y: 42,
+      size: 7,
       font: fontSans,
       color: rgb(0.3, 0.35, 0.45),
     });

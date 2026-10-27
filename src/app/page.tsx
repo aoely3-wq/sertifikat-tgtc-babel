@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Navbar from '@/components/Navbar';
 import CertificatePreview from '@/components/CertificatePreview';
 import {
@@ -18,10 +18,23 @@ import {
   RefreshCw,
   ExternalLink,
 } from 'lucide-react';
-import { Participant } from '@/lib/types';
+import { Participant, CertificateSettings } from '@/lib/types';
 
 export default function HomePage() {
   const [activeTab, setActiveTab] = useState<'claim' | 'search'>('claim');
+  const [settings, setSettings] = useState<CertificateSettings | null>(null);
+
+  // Load Settings on mount
+  useEffect(() => {
+    fetch('/api/settings')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data?.settings) {
+          setSettings(data.settings);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   // Form State
   const [name, setName] = useState('');
@@ -247,10 +260,10 @@ export default function HomePage() {
                       </p>
                     </div>
 
-                    {/* Instansi / Kampus */}
+                    {/* Fakultas / Program Studi */}
                     <div>
                       <label className="block text-xs font-semibold text-slate-700 mb-1">
-                        Asal Universitas / Instansi / Prodi
+                        Fakultas / Program Studi
                       </label>
                       <div className="relative">
                         <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
@@ -260,7 +273,7 @@ export default function HomePage() {
                           type="text"
                           value={institution}
                           onChange={(e) => setInstitution(e.target.value)}
-                          placeholder="Contoh: Universitas Bangka Belitung"
+                          placeholder="Contoh: Fakultas Ekonomi dan Bisnis"
                           className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#0F2B5C] focus:bg-white transition-colors"
                         />
                       </div>
@@ -349,7 +362,11 @@ export default function HomePage() {
                     </span>
                   </div>
 
-                  <CertificatePreview name={name} institution={institution} />
+                  <CertificatePreview
+                    name={name}
+                    institution={institution}
+                    settings={settings || undefined}
+                  />
 
                   <div className="bg-blue-50 rounded-xl p-3.5 border border-blue-200 text-xs text-blue-900 flex items-start space-x-2.5">
                     <Mail className="w-4 h-4 text-[#0F2B5C] mt-0.5 flex-shrink-0" />

@@ -5,12 +5,18 @@ import { sendCertificateEmail } from '@/lib/email';
 import { generateWhatsAppMessage, sendAutomaticWhatsApp } from '@/lib/whatsapp';
 
 function getBaseUrl(req: NextRequest) {
+  if (process.env.NEXT_PUBLIC_APP_URL) {
+    return process.env.NEXT_PUBLIC_APP_URL.replace(/\/+$/, '');
+  }
   const forwardedHost = req.headers.get('x-forwarded-host') || req.headers.get('host');
   const forwardedProto = req.headers.get('x-forwarded-proto') || 'https';
   if (forwardedHost && !forwardedHost.includes('localhost') && !forwardedHost.includes('127.0.0.1')) {
     return `${forwardedProto}://${forwardedHost}`;
   }
-  return req.nextUrl.origin || 'http://localhost:3001';
+  if (process.env.VERCEL_PROJECT_PRODUCTION_URL) {
+    return `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`;
+  }
+  return 'https://sertifikat-tgtc-babel.vercel.app';
 }
 
 export async function POST(req: NextRequest) {

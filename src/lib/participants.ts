@@ -1,5 +1,7 @@
 import fs from 'fs';
 import path from 'path';
+import zlib from 'zlib';
+import crypto from 'crypto';
 import { Participant, CertificateSettings } from './types';
 
 const IS_VERCEL = !!process.env.VERCEL;
@@ -7,6 +9,74 @@ const SEED_DATA_DIR = path.join(process.cwd(), 'data');
 const DATA_DIR = IS_VERCEL ? path.join('/tmp', 'tgtc-data') : SEED_DATA_DIR;
 const PARTICIPANTS_FILE = path.join(DATA_DIR, 'participants.json');
 const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
+const SIGN_SECRET = process.env.APP_SECRET || 'tgtc-kemenkeu-djpb-2026';
+
+/**
+ * Membuat ID e-Sertifikat yang bersifat Self-Contained & Cryptographically Signed.
+ * Menyimpan data esensial di dalam ID itu sendiri sehingga tautan WhatsApp & Email
+ * DIJAMIN 100% TIDAK PERNAH 404 meskipun serverless lambda Vercel mengalami cold start / reset /tmp.
+ */
+export function createParticipantId(data: {
+  name: string;
+  certNumber: string;
+  institution?: string;
+  email: string;
+  phone: string;
+  createdAt?: string;
+}): string {
+  const ts = Math.floor((data.createdAt ? new Date(data.createdAt).getTime() : Date.now()) / 1000);
+  const payload = [
+    data.name.trim(),
+    data.certNumber.trim(),
+    (data.institution || '').trim(),
+    data.email.trim().toLowerCase(),
+    data.phone.trim(),
+    ts,
+  ];
+  const compressed = zlib.deflateRawSync(Buffer.from(JSON.stringify(payload), 'utf-8'));
+  const payloadB64 = compressed.toString('base64url');
+  const hmac = crypto.createHmac('sha256', SIGN_SECRET).update(payloadB64).digest('base64url').substring(0, 10);
+  return `tgtc.${payloadB64}.${hmac}`;
+}
+
+/**
+ * Mendekode dan memverifikasi ID e-Sertifikat secara stateless.
+ */
+export function decodeParticipantId(id: string): Participant | null {
+  if (!id || typeof id !== 'string') return null;
+  if (!id.startsWith('tgtc.')) return null;
+
+  const parts = id.split('.');
+  if (parts.length !== 3) return null;
+
+  const [, payloadB64, hmac] = parts;
+  const expectedHmac = crypto.createHmac('sha256', SIGN_SECRET).update(payloadB64).digest('base64url').substring(0, 10);
+  if (hmac !== expectedHmac) {
+    return null;
+  }
+
+  try {
+    const jsonStr = zlib.inflateRawSync(Buffer.from(payloadB64, 'base64url')).toString('utf-8');
+    const arr = JSON.parse(jsonStr);
+    if (!Array.isArray(arr) || arr.length < 6) return null;
+
+    const [name, certNumber, institution, email, phone, ts] = arr;
+    return {
+      id,
+      name,
+      certNumber,
+      institution: institution || undefined,
+      email,
+      phone,
+      createdAt: new Date(Number(ts) * 1000).toISOString(),
+      emailSent: true,
+      downloadCount: 0,
+    };
+  } catch (e) {
+    console.error('Gagal decode token ID peserta:', e);
+    return null;
+  }
+}
 
 function ensureDataDir() {
   if (!fs.existsSync(DATA_DIR)) {
@@ -56,7 +126,19 @@ export function saveParticipants(participants: Participant[]): void {
 
 export function getParticipantById(id: string): Participant | undefined {
   const all = getParticipants();
-  return all.find((p) => p.id === id);
+  const found = all.find((p) => p.id === id);
+  if (found) return found;
+
+  // Stateless fallback: verifikasi cryptographic token di dalam ID
+  const decoded = decodeParticipantId(id);
+  if (decoded) {
+    // Cache ke participants.json lokal agar pencarian berikutnya instan
+    all.unshift(decoded);
+    saveParticipants(all);
+    return decoded;
+  }
+
+  return undefined;
 }
 
 export function findParticipantByEmailOrPhone(query: string): Participant | undefined {
@@ -113,13 +195,21 @@ export function addParticipant(data: Omit<Participant, 'id' | 'certNumber' | 'cr
     certNumberNext: nextSeq + 1,
   });
 
-  const id = `tgtc-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`;
+  const createdAt = new Date().toISOString();
+  const id = createParticipantId({
+    name: data.name,
+    certNumber,
+    institution: data.institution,
+    email: data.email,
+    phone: data.phone,
+    createdAt,
+  });
 
   const newParticipant: Participant = {
     ...data,
     id,
     certNumber,
-    createdAt: new Date().toISOString(),
+    createdAt,
     emailSent: false,
     downloadCount: 0,
   };
