@@ -25,6 +25,10 @@ import {
   EyeOff,
   Lock,
   Unlock,
+  Copy,
+  Check,
+  ExternalLink,
+  Database,
 } from 'lucide-react';
 import { Participant, CertificateSettings } from '@/lib/types';
 
@@ -99,6 +103,40 @@ export default function AdminPage() {
   const [testWaTarget, setTestWaTarget] = useState('');
   const [isTestingWa, setIsTestingWa] = useState(false);
   const [testWaFeedback, setTestWaFeedback] = useState<{ success: boolean; msg: string } | null>(null);
+
+  // Google Sheet Testing State
+  const [isTestingSheet, setIsTestingSheet] = useState(false);
+  const [testSheetFeedback, setTestSheetFeedback] = useState<{ success: boolean; msg: string } | null>(null);
+  const [copiedAppsScript, setCopiedAppsScript] = useState(false);
+
+  const handleTestGoogleSheet = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const url = settings?.googleSheetWebhookUrl?.trim();
+    if (!url) {
+      alert('Harap masukkan URL Web App Google Apps Script terlebih dahulu');
+      return;
+    }
+    try {
+      setIsTestingSheet(true);
+      setTestSheetFeedback(null);
+      const res = await fetch('/api/test-google-sheet', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setTestSheetFeedback({ success: true, msg: data.message || 'Koneksi ke Google Sheet berhasil!' });
+      } else {
+        setTestSheetFeedback({ success: false, msg: data.error || 'Gagal menghubungkan ke Google Sheet' });
+      }
+    } catch (err: unknown) {
+      const error = err as Error;
+      setTestSheetFeedback({ success: false, msg: `Gagal uji koneksi: ${error.message}` });
+    } finally {
+      setIsTestingSheet(false);
+    }
+  };
 
   // Fonnte Live Status State
   const [fonnteInfo, setFonnteInfo] = useState<{
@@ -1040,6 +1078,225 @@ export default function AdminPage() {
                   </div>
                 )}
               </div>
+            </div>
+
+            {/* SEKSI 3: SINKRONISASI DATABASE PERMANEN GOOGLE SHEETS */}
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 sm:p-8">
+              <div className="flex items-center space-x-3 mb-2">
+                <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center font-bold">
+                  <FileSpreadsheet className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="text-base sm:text-lg font-bold text-slate-800">
+                    3. Sinkronisasi Database Permanen (Google Sheets)
+                  </h2>
+                  <p className="text-xs text-slate-500">
+                    Setiap mahasiswa yang klaim sertifikat otomatis masuk ke Google Sheets secara realtime & permanen
+                  </p>
+                </div>
+              </div>
+
+              {/* Status Badge */}
+              <div className="mt-3 mb-4">
+                {settings.googleSheetWebhookUrl ? (
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                    <CheckCircle className="w-3.5 h-3.5" />
+                    <span>Terhubung dengan Google Sheet</span>
+                  </div>
+                ) : (
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+                    <AlertTriangle className="w-3.5 h-3.5" />
+                    <span>Belum Terhubung (Data masih tersimpan di memori serverless)</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Petunjuk Praktis */}
+              <div className="p-4 bg-emerald-50/60 rounded-xl border border-emerald-200 text-xs text-emerald-950 space-y-2 mb-5">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold flex items-center gap-1.5">
+                    <Database className="w-4 h-4 text-emerald-700" />
+                    Langkah Mudah Menghubungkan Google Sheet (Hanya 1 Menit):
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const code = `function doPost(e) {
+  try {
+    var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+    if (sheet.getLastRow() === 0) {
+      sheet.appendRow([
+        "Waktu Klaim",
+        "ID Peserta",
+        "Nomor Sertifikat",
+        "Nama Lengkap",
+        "Instansi / Kampus",
+        "Email",
+        "Nomor WhatsApp",
+        "Link Download Sertifikat",
+        "Email Terkirim",
+        "WA Terkirim"
+      ]);
+      sheet.getRange(1, 1, 1, 10).setFontWeight("bold").setBackground("#0F2B5C").setFontColor("#FFFFFF");
+      sheet.setFrozenRows(1);
+    }
+    var data = JSON.parse(e.postData.contents);
+    var p = data.participant || data;
+    var idColValues = sheet.getRange(2, 2, Math.max(sheet.getLastRow() - 1, 1), 1).getValues();
+    var rowIndex = -1;
+    for (var i = 0; i < idColValues.length; i++) {
+      if (idColValues[i][0] === p.id) {
+        rowIndex = i + 2;
+        break;
+      }
+    }
+    var rowData = [
+      p.createdAt || new Date().toISOString(),
+      p.id,
+      p.certNumber,
+      p.name,
+      p.institution || "-",
+      p.email,
+      "'" + (p.phone || ""),
+      p.certUrl || "",
+      p.emailSent ? "Ya" : "Belum",
+      p.whatsappSent ? "Ya" : "Belum"
+    ];
+    if (rowIndex > 0) {
+      sheet.getRange(rowIndex, 1, 1, rowData.length).setValues([rowData]);
+    } else {
+      sheet.appendRow(rowData);
+    }
+    return ContentService.createTextOutput(JSON.stringify({ status: "success", id: p.id }))
+      .setMimeType(ContentService.MimeType.JSON);
+  } catch (err) {
+    return ContentService.createTextOutput(JSON.stringify({ status: "error", message: err.toString() }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+function doGet(e) {
+  try {
+    var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+    var rows = sheet.getDataRange().getValues();
+    var participants = [];
+    for (var i = 1; i < rows.length; i++) {
+      var r = rows[i];
+      if (!r[1]) continue;
+      participants.push({
+        id: String(r[1]),
+        certNumber: String(r[2] || ""),
+        name: String(r[3] || ""),
+        institution: String(r[4] || ""),
+        email: String(r[5] || ""),
+        phone: String(r[6] || "").replace(/^'/, ""),
+        createdAt: r[0] ? new Date(r[0]).toISOString() : new Date().toISOString(),
+        certUrl: String(r[7] || ""),
+        emailSent: r[8] === "Ya" || r[8] === true,
+        whatsappSent: r[9] === "Ya" || r[9] === true,
+        downloadCount: 0
+      });
+    }
+    return ContentService.createTextOutput(JSON.stringify({ status: "success", count: participants.length, participants: participants }))
+      .setMimeType(ContentService.MimeType.JSON);
+  } catch (err) {
+    return ContentService.createTextOutput(JSON.stringify({ status: "error", message: err.toString(), participants: [] }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}`;
+                      navigator.clipboard.writeText(code);
+                      setCopiedAppsScript(true);
+                      setTimeout(() => setCopiedAppsScript(false), 2500);
+                    }}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-[11px] font-bold shadow-sm transition-colors"
+                  >
+                    {copiedAppsScript ? (
+                      <>
+                        <Check className="w-3.5 h-3.5" />
+                        <span>Kode Berhasil Disalin!</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-3.5 h-3.5" />
+                        <span>Salin Kode Apps Script</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+                <ol className="list-decimal list-inside space-y-1 pl-1">
+                  <li>Buat Spreadsheet kosong baru di <a href="https://sheets.new" target="_blank" rel="noreferrer" className="underline font-bold text-emerald-800">sheets.new</a></li>
+                  <li>Buka menu <strong>Ekstensi &gt; Apps Script</strong>, hapus kode bawaan lalu paste kode yang telah Anda salin di atas.</li>
+                  <li>Klik tombol biru <strong>Terapkan (Deploy) &gt; Deployment baru</strong>.</li>
+                  <li>Pilih jenis <strong>Aplikasi Web</strong>:
+                    <ul className="list-disc list-inside pl-4 text-slate-700 mt-0.5">
+                      <li>Jalankan sebagai: <strong>Saya (email Anda)</strong></li>
+                      <li>Siapa yang memiliki akses: <strong className="text-emerald-800">Siapa saja (Anyone)</strong></li>
+                    </ul>
+                  </li>
+                  <li>Klik <strong>Deploy</strong>, lalu salin <strong>URL Aplikasi Web</strong> yang dihasilkan ke kolom di bawah.</li>
+                </ol>
+              </div>
+
+              {/* Form Input Webhook URL */}
+              <form onSubmit={handleSaveSettings} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    URL Web App Google Apps Script
+                  </label>
+                  <input
+                    type="url"
+                    value={settings.googleSheetWebhookUrl || ''}
+                    onChange={(e) => setSettings({ ...settings, googleSheetWebhookUrl: e.target.value })}
+                    placeholder="https://script.google.com/macros/s/AKfycbx.../exec"
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-600"
+                  />
+                  <p className="text-[11px] text-slate-500 mt-1">
+                    Tautan endpoint Web App dari Google Spreadsheet yang siap menerima data peserta baru.
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-3 pt-2">
+                  <button
+                    type="submit"
+                    disabled={isSaving}
+                    className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs shadow-sm transition-colors flex items-center space-x-1.5 disabled:opacity-50"
+                  >
+                    <Save className="w-4 h-4" />
+                    <span>{isSaving ? 'Menyimpan...' : 'Simpan Pengaturan Google Sheet'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleTestGoogleSheet}
+                    disabled={isTestingSheet || !settings.googleSheetWebhookUrl}
+                    className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-semibold text-xs border border-slate-200 transition-colors flex items-center space-x-1.5 disabled:opacity-50"
+                  >
+                    {isTestingSheet ? (
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Send className="w-3.5 h-3.5 text-emerald-600" />
+                    )}
+                    <span>Uji Coba Koneksi Sheet</span>
+                  </button>
+                </div>
+              </form>
+
+              {testSheetFeedback && (
+                <div
+                  className={`mt-4 p-3.5 rounded-xl text-xs font-medium flex items-center space-x-2 ${
+                    testSheetFeedback.success
+                      ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
+                      : 'bg-rose-100 text-rose-900 border border-rose-300'
+                  }`}
+                >
+                  {testSheetFeedback.success ? (
+                    <CheckCircle className="w-4 h-4 text-emerald-700 flex-shrink-0" />
+                  ) : (
+                    <AlertTriangle className="w-4 h-4 text-rose-700 flex-shrink-0" />
+                  )}
+                  <span>{testSheetFeedback.msg}</span>
+                </div>
+              )}
             </div>
           </div>
         )}

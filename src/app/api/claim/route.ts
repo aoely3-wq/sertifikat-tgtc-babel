@@ -3,6 +3,7 @@ import { addParticipant, getSettings, updateParticipant } from '@/lib/participan
 import { generateCertificatePdf } from '@/lib/certificate';
 import { sendCertificateEmail } from '@/lib/email';
 import { generateWhatsAppMessage, sendAutomaticWhatsApp } from '@/lib/whatsapp';
+import { syncParticipantToGoogleSheet } from '@/lib/googleSheet';
 
 function getBaseUrl(req: NextRequest) {
   if (process.env.NEXT_PUBLIC_APP_URL) {
@@ -83,9 +84,16 @@ export async function POST(req: NextRequest) {
       whatsappUrl: whatsappResult.directUrl,
     });
 
+    const finalParticipant = updated || participant;
+
+    // 6. Sinkronisasi Permanen ke Google Sheets (Non-blocking)
+    syncParticipantToGoogleSheet(finalParticipant, certUrl, settings).catch((err) =>
+      console.error('Google Sheet background sync error:', err)
+    );
+
     return NextResponse.json({
       success: true,
-      participant: updated || participant,
+      participant: finalParticipant,
       certUrl,
       whatsappUrl: whatsappResult.directUrl,
       emailResult,

@@ -50,4 +50,7 @@ export interface CertificateSettings {
   waGatewayToken?: string;
   waGatewayProvider?: 'fonnte' | 'wablas' | 'custom';
   waGatewayEndpoint?: string;
+  // Google Sheets Integration (Penyimpanan permanen cloud realtime)
+  googleSheetWebhookUrl?: string;
+  googleSheetEnabled?: boolean;
 }

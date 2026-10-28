@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getParticipants, findParticipantByEmailOrPhone, deleteParticipant, clearAllParticipants, resetCertificateNumber, getNextCertificateNumber } from '@/lib/participants';
+import { fetchParticipantsFromGoogleSheet } from '@/lib/googleSheet';
+import { Participant } from '@/lib/types';
 
 export async function GET(req: NextRequest) {
   const search = req.nextUrl.searchParams.get('search');
@@ -8,9 +10,25 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ participant: found || null });
   }
 
-  const all = getParticipants();
+  const localList = getParticipants();
+  let mergedList = localList;
+
+  try {
+    const sheetList = await fetchParticipantsFromGoogleSheet();
+    if (sheetList && sheetList.length > 0) {
+      const map = new Map<string, Participant>();
+      localList.forEach((p) => map.set(p.id, p));
+      sheetList.forEach((p) => map.set(p.id, { ...(map.get(p.id) || {}), ...p }));
+      mergedList = Array.from(map.values()).sort(
+        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      );
+    }
+  } catch (e) {
+    console.error('Failed to merge Google Sheet participants:', e);
+  }
+
   const nextNumber = getNextCertificateNumber();
-  return NextResponse.json({ participants: all, nextCertificateNumber: nextNumber });
+  return NextResponse.json({ participants: mergedList, nextCertificateNumber: nextNumber });
 }
 
 export async function POST(req: NextRequest) {
