@@ -34,7 +34,7 @@ export default function HomePage() {
           setSettings(data.settings);
         }
       })
-      .catch(() => {});
+      .catch(() => { });
   }, []);
 
   // Form State
@@ -182,11 +182,10 @@ export default function HomePage() {
                   setActiveTab('claim');
                   setSuccessData(null);
                 }}
-                className={`flex items-center space-x-2 px-5 py-2.5 rounded-lg text-xs sm:text-sm font-semibold transition-all ${
-                  activeTab === 'claim'
+                className={`flex items-center space-x-2 px-5 py-2.5 rounded-lg text-xs sm:text-sm font-semibold transition-all ${activeTab === 'claim'
                     ? 'bg-amber-400 text-slate-900 shadow-md scale-100'
                     : 'text-blue-200 hover:text-white hover:bg-white/5'
-                }`}
+                  }`}
               >
                 {settings?.isRegistrationOpen !== true ? (
                   <Lock className="w-4 h-4 text-rose-300" />
@@ -203,11 +202,10 @@ export default function HomePage() {
               <button
                 type="button"
                 onClick={() => setActiveTab('search')}
-                className={`flex items-center space-x-2 px-5 py-2.5 rounded-lg text-xs sm:text-sm font-semibold transition-all ${
-                  activeTab === 'search'
+                className={`flex items-center space-x-2 px-5 py-2.5 rounded-lg text-xs sm:text-sm font-semibold transition-all ${activeTab === 'search'
                     ? 'bg-amber-400 text-slate-900 shadow-md scale-100'
                     : 'text-blue-200 hover:text-white hover:bg-white/5'
-                }`}
+                  }`}
               >
                 <Search className="w-4 h-4" />
                 <span>Cari Status Sertifikat</span>
