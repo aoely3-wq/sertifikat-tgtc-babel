@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
     const settings = getSettings();
 
     // Validasi apakah akses pendaftaran sedang dibuka oleh panitia
-    if (settings.isRegistrationOpen === false) {
+    if (settings.isRegistrationOpen !== true) {
       return NextResponse.json(
         {
           error:

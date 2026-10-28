@@ -188,13 +188,13 @@ export default function HomePage() {
                     : 'text-blue-200 hover:text-white hover:bg-white/5'
                 }`}
               >
-                {settings?.isRegistrationOpen === false ? (
+                {settings?.isRegistrationOpen !== true ? (
                   <Lock className="w-4 h-4 text-rose-300" />
                 ) : (
                   <Award className="w-4 h-4" />
                 )}
                 <span>
-                  {settings?.isRegistrationOpen === false
+                  {settings?.isRegistrationOpen !== true
                     ? 'Klaim Mandiri (Ditutup)'
                     : 'Klaim Sertifikat Baru'}
                 </span>
@@ -222,7 +222,7 @@ export default function HomePage() {
         {/* TAB 1: KLAIM SERTIFIKAT BARU */}
         {activeTab === 'claim' && (
           <div>
-            {settings && settings.isRegistrationOpen === false ? (
+            {settings?.isRegistrationOpen !== true ? (
               /* Tampilan Jika Akses Pendaftaran Ditutup */
               <div className="max-w-2xl mx-auto bg-white rounded-3xl shadow-sm border border-slate-200 p-8 sm:p-12 text-center animate-fade-in">
                 <div className="w-16 h-16 rounded-2xl bg-amber-50 text-amber-600 border border-amber-200 flex items-center justify-center mx-auto mb-4">

@@ -95,9 +95,15 @@ function ensureDataDir() {
     }
 
     const seedSetFile = path.join(SEED_DATA_DIR, 'settings.json');
-    if (!fs.existsSync(SETTINGS_FILE) && fs.existsSync(seedSetFile)) {
+    if (fs.existsSync(seedSetFile)) {
       try {
-        fs.copyFileSync(seedSetFile, SETTINGS_FILE);
+        if (!fs.existsSync(SETTINGS_FILE)) {
+          fs.copyFileSync(seedSetFile, SETTINGS_FILE);
+        } else {
+          const seed = JSON.parse(fs.readFileSync(seedSetFile, 'utf-8'));
+          const cur = JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf-8'));
+          fs.writeFileSync(SETTINGS_FILE, JSON.stringify({ ...cur, ...seed }, null, 2), 'utf-8');
+        }
       } catch (e) {
         console.error('Failed to copy seed settings:', e);
       }
@@ -239,39 +245,26 @@ export function deleteParticipant(id: string): boolean {
 
 export function getSettings(): CertificateSettings {
   ensureDataDir();
-  if (!fs.existsSync(SETTINGS_FILE)) {
-    const defaultSettings: CertificateSettings = {
-      eventTitle: "Kuliah Umum Treasury Goes To Campus",
-      subTitle: "Peran Strategis APBN dalam Mendukung Pembangunan Berkelanjutan di Kepulauan Bangka Belitung",
-      organizer: "Kantor Wilayah Direktorat Jenderal Perbendaharaan Provinsi Kepulauan Bangka Belitung",
-      location: "Pangkalpinang, Kepulauan Bangka Belitung",
-      eventDateText: "26 Oktober 2026",
-      signatoryName: "Muhammad Mufti Arkan",
-      signatoryTitle: "Kepala Kanwil DJPb Provinsi Kepulauan Bangka Belitung",
-      signatory2Name: "Prof. Dr. Ibrahim, S.Fil., M.Si.",
-      signatory2Title: "Rektor Universitas Bangka Belitung",
-      namePositionY: 50,
-      nameFontSize: 34,
-      nameColor: "#0F2B5C",
-      certNumberPositionY: 38,
-      useCustomTemplate: false,
-      customTemplatePath: "/templates/certificate-template.png",
-      smtpHost: "smtp.gmail.com",
-      smtpPort: 465,
-      smtpUser: "",
-      smtpPass: "",
-      smtpFrom: "Kanwil DJPb Babel <no-reply@kemenkeu.go.id>",
-      smtpSecure: true,
-    };
-    fs.writeFileSync(SETTINGS_FILE, JSON.stringify(defaultSettings, null, 2), 'utf-8');
-    return defaultSettings;
+
+  let baseSettings: Partial<CertificateSettings> = {};
+  const seedSetFile = path.join(SEED_DATA_DIR, 'settings.json');
+  if (fs.existsSync(seedSetFile)) {
+    try {
+      baseSettings = JSON.parse(fs.readFileSync(seedSetFile, 'utf-8'));
+    } catch {}
   }
-  try {
-    const raw = fs.readFileSync(SETTINGS_FILE, 'utf-8');
-    return JSON.parse(raw);
-  } catch {
-    return {} as CertificateSettings;
+
+  let dynamicSettings: Partial<CertificateSettings> = {};
+  if (fs.existsSync(SETTINGS_FILE)) {
+    try {
+      dynamicSettings = JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf-8'));
+    } catch {}
   }
+
+  const merged = { ...baseSettings, ...dynamicSettings };
+  // Default eksplisit tertutup jika tidak true
+  merged.isRegistrationOpen = merged.isRegistrationOpen === true;
+  return merged as CertificateSettings;
 }
 
 export function saveSettings(settings: Partial<CertificateSettings>): CertificateSettings {
