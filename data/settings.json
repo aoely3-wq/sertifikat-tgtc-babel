@@ -27,5 +27,7 @@
   "waGatewayToken": "L51Vfvj6BNViqEM3pUV8",
   "waGatewayProvider": "fonnte",
   "waGatewayEndpoint": "https://api.fonnte.com/send",
-  "googleSheetWebhookUrl": "https://script.google.com/macros/s/AKfycbyZ4a7aW1PZsom1tKNG59D1p9-56yv_9MyQn6BV5e6IR46SwHU2xNvyA6o-ZiZEzyfS/exec"
+  "googleSheetWebhookUrl": "https://script.google.com/macros/s/AKfycbyZ4a7aW1PZsom1tKNG59D1p9-56yv_9MyQn6BV5e6IR46SwHU2xNvyA6o-ZiZEzyfS/exec",
+  "isRegistrationOpen": false,
+  "registrationClosedMessage": "Akses klaim mandiri e-sertifikat untuk kegiatan ini telah ditutup oleh panitia penyelenggara. Bagi peserta yang telah terdaftar, Anda tetap dapat mencari dan mengunduh kembali dokumen sertifikat Anda melalui fitur Pencarian di bawah."
 }

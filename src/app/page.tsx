@@ -17,6 +17,7 @@ import {
   Copy,
   RefreshCw,
   ExternalLink,
+  Lock,
 } from 'lucide-react';
 import { Participant, CertificateSettings } from '@/lib/types';
 
@@ -187,8 +188,16 @@ export default function HomePage() {
                     : 'text-blue-200 hover:text-white hover:bg-white/5'
                 }`}
               >
-                <Award className="w-4 h-4" />
-                <span>Klaim Sertifikat Baru</span>
+                {settings?.isRegistrationOpen === false ? (
+                  <Lock className="w-4 h-4 text-rose-300" />
+                ) : (
+                  <Award className="w-4 h-4" />
+                )}
+                <span>
+                  {settings?.isRegistrationOpen === false
+                    ? 'Klaim Mandiri (Ditutup)'
+                    : 'Klaim Sertifikat Baru'}
+                </span>
               </button>
 
               <button
@@ -213,7 +222,46 @@ export default function HomePage() {
         {/* TAB 1: KLAIM SERTIFIKAT BARU */}
         {activeTab === 'claim' && (
           <div>
-            {!successData ? (
+            {settings && settings.isRegistrationOpen === false ? (
+              /* Tampilan Jika Akses Pendaftaran Ditutup */
+              <div className="max-w-2xl mx-auto bg-white rounded-3xl shadow-sm border border-slate-200 p-8 sm:p-12 text-center animate-fade-in">
+                <div className="w-16 h-16 rounded-2xl bg-amber-50 text-amber-600 border border-amber-200 flex items-center justify-center mx-auto mb-4">
+                  <Lock className="w-8 h-8" />
+                </div>
+                <span className="inline-block px-3.5 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-900 mb-3 border border-amber-200">
+                  Pemberitahuan Resmi Panitia
+                </span>
+                <h2 className="text-xl sm:text-2xl font-extrabold text-slate-800 mb-2">
+                  Pendaftaran & Klaim e-Sertifikat Telah Ditutup
+                </h2>
+                <p className="text-slate-600 text-sm leading-relaxed mb-6 max-w-lg mx-auto">
+                  {settings?.registrationClosedMessage ||
+                    'Akses klaim mandiri e-sertifikat untuk kegiatan ini telah ditutup oleh panitia penyelenggara. Bagi peserta yang telah terdaftar, Anda tetap dapat mencari dan mengunduh kembali dokumen sertifikat Anda.'}
+                </p>
+
+                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 mb-6 text-left max-w-md mx-auto">
+                  <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                    <Search className="w-4 h-4 text-[#0F2B5C]" />
+                    Sudah Pernah Mendaftar Sebelumnya?
+                  </h4>
+                  <p className="text-xs text-slate-500 mb-4 leading-normal">
+                    Dokumen sertifikat Anda tetap tersimpan aman. Cukup masukkan email atau nomor WhatsApp Anda untuk mengunduh kembali file sertifikat resmi.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('search')}
+                    className="w-full py-2.5 px-4 bg-[#0F2B5C] hover:bg-blue-900 text-white font-bold text-xs rounded-xl transition-colors flex items-center justify-center gap-2 shadow-sm"
+                  >
+                    <Search className="w-4 h-4" />
+                    <span>Cari & Unduh Sertifikat Saya</span>
+                  </button>
+                </div>
+
+                <p className="text-xs text-slate-400">
+                  {settings?.organizer || 'Kantor Wilayah Direktorat Jenderal Perbendaharaan Provinsi Kepulauan Bangka Belitung'}
+                </p>
+              </div>
+            ) : !successData ? (
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
                 {/* Form Input Peserta */}
                 <div className="lg:col-span-5 bg-white rounded-2xl shadow-sm border border-slate-200 p-6 sm:p-7">

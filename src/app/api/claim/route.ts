@@ -22,6 +22,21 @@ function getBaseUrl(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
+    const settings = getSettings();
+
+    // Validasi apakah akses pendaftaran sedang dibuka oleh panitia
+    if (settings.isRegistrationOpen === false) {
+      return NextResponse.json(
+        {
+          error:
+            settings.registrationClosedMessage ||
+            'Pendaftaran dan klaim e-sertifikat untuk kegiatan ini telah ditutup oleh panitia.',
+          isClosed: true,
+        },
+        { status: 403 }
+      );
+    }
+
     const body = await req.json();
     const { name, email, phone, institution } = body;
 
@@ -43,7 +58,6 @@ export async function POST(req: NextRequest) {
       institution: institution?.trim() || '',
     });
 
-    const settings = getSettings();
     const origin = getBaseUrl(req);
     const certUrl = `${origin}/sertifikat/${participant.id}`;
 

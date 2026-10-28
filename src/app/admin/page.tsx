@@ -340,6 +340,40 @@ export default function AdminPage() {
     }
   };
 
+  // Toggle Buka/Tutup Akses Pendaftaran Peserta
+  const handleToggleRegistration = async () => {
+    if (!settings) return;
+    const newState = !settings.isRegistrationOpen;
+    const confirmMsg = newState
+      ? 'Buka kembali akses pendaftaran dan klaim mandiri e-sertifikat untuk peserta?'
+      : 'Tutup sementara akses klaim mandiri e-sertifikat? Peserta baru tidak akan bisa mengisi formulir.';
+    if (!confirm(confirmMsg)) return;
+
+    try {
+      setIsSaving(true);
+      const updatedSettings = { ...settings, isRegistrationOpen: newState };
+      const res = await fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updatedSettings),
+      });
+      const data = await res.json();
+      if (data.settings) {
+        setSettings(data.settings);
+        setSaveSuccessMsg(
+          newState
+            ? 'Akses pendaftaran peserta BERHASIL DIBUKA!'
+            : 'Akses pendaftaran peserta BERHASIL DITUTUP SEMENTARA!'
+        );
+        setTimeout(() => setSaveSuccessMsg(''), 4000);
+      }
+    } catch {
+      alert('Gagal mengubah status pendaftaran');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   // Run Test Email
   const handleTestEmail = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -546,6 +580,77 @@ export default function AdminPage() {
             </button>
           </div>
         </div>
+
+        {/* Status Akses Pendaftaran Peserta (Buka/Tutup) */}
+        {settings && (
+          <div
+            className={`mb-8 p-4 sm:p-5 rounded-2xl border transition-all flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-sm ${
+              settings.isRegistrationOpen
+                ? 'bg-emerald-50/70 border-emerald-300'
+                : 'bg-rose-50/80 border-rose-300'
+            }`}
+          >
+            <div className="flex items-start sm:items-center space-x-3.5">
+              <div
+                className={`w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 font-bold ${
+                  settings.isRegistrationOpen
+                    ? 'bg-emerald-600 text-white shadow-sm'
+                    : 'bg-rose-600 text-white shadow-sm'
+                }`}
+              >
+                {settings.isRegistrationOpen ? (
+                  <Unlock className="w-5 h-5" />
+                ) : (
+                  <Lock className="w-5 h-5" />
+                )}
+              </div>
+              <div>
+                <div className="flex items-center space-x-2">
+                  <h3 className="text-sm sm:text-base font-bold text-slate-900">
+                    Akses Formulir Peserta:
+                  </h3>
+                  <span
+                    className={`px-2.5 py-0.5 rounded-full text-xs font-extrabold uppercase tracking-wide ${
+                      settings.isRegistrationOpen
+                        ? 'bg-emerald-200/80 text-emerald-900'
+                        : 'bg-rose-200 text-rose-900'
+                    }`}
+                  >
+                    {settings.isRegistrationOpen ? 'Terbuka (Aktif)' : 'Ditutup Sementara'}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-600 mt-0.5">
+                  {settings.isRegistrationOpen
+                    ? 'Peserta baru saat ini dapat mengisi formulir mandiri dan mencetak e-sertifikat.'
+                    : 'Akses klaim baru sedang ditutup. Peserta lama tetap dapat mencari & mengunduh sertifikat yang sudah terbit.'}
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleToggleRegistration}
+              disabled={isSaving}
+              className={`w-full sm:w-auto px-5 py-2.5 rounded-xl text-xs font-bold shadow-sm transition-all flex items-center justify-center space-x-2 shrink-0 ${
+                settings.isRegistrationOpen
+                  ? 'bg-rose-600 hover:bg-rose-700 text-white ring-2 ring-rose-400/50'
+                  : 'bg-emerald-600 hover:bg-emerald-700 text-white ring-2 ring-emerald-400/50'
+              }`}
+            >
+              {settings.isRegistrationOpen ? (
+                <>
+                  <Lock className="w-4 h-4" />
+                  <span>Tutup Akses Pendaftaran</span>
+                </>
+              ) : (
+                <>
+                  <Unlock className="w-4 h-4" />
+                  <span>Buka Akses Pendaftaran</span>
+                </>
+              )}
+            </button>
+          </div>
+        )}
 
         {/* Metrics Overview Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">

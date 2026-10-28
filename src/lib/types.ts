@@ -53,4 +53,7 @@ export interface CertificateSettings {
   // Google Sheets Integration (Penyimpanan permanen cloud realtime)
   googleSheetWebhookUrl?: string;
   googleSheetEnabled?: boolean;
+  // Status Akses Pendaftaran / Klaim Peserta
+  isRegistrationOpen?: boolean; // default: false (ditutup sementara)
+  registrationClosedMessage?: string;
 }
