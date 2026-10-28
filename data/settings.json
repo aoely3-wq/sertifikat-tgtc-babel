@@ -13,7 +13,7 @@
   "nameColor": "#0F2B5C",
   "certNumberPositionY": 35.4,
   "certNumberFormat": "P Sertifik-{SEQ}/WPB.10/2026",
-  "certNumberNext": 74,
+  "certNumberNext": 127,
   "certNumberStart": 72,
   "certNumberDigits": 3,
   "useCustomTemplate": true,
@@ -26,5 +26,6 @@
   "smtpSecure": true,
   "waGatewayToken": "L51Vfvj6BNViqEM3pUV8",
   "waGatewayProvider": "fonnte",
-  "waGatewayEndpoint": "https://api.fonnte.com/send"
+  "waGatewayEndpoint": "https://api.fonnte.com/send",
+  "googleSheetWebhookUrl": "https://script.google.com/macros/s/AKfycbyZ4a7aW1PZsom1tKNG59D1p9-56yv_9MyQn6BV5e6IR46SwHU2xNvyA6o-ZiZEzyfS/exec"
 }
