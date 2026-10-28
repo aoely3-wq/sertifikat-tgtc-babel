@@ -111,6 +111,31 @@ function ensureDataDir() {
   }
 }
 
+export const DUMMY_NAMES = [
+  'maria lucky ariana',
+  'roy suryo',
+  'roy ganteng',
+  'shania rizky prasanto',
+  'aulia rahim',
+  'gunanto',
+  'tes yuk',
+];
+
+export const DUMMY_EMAILS = [
+  'aoely3@gmail.com',
+  'aulia.rahim.uon@gmail.com',
+  'luckariana@gmail.com',
+  'fajar.tgtc@example.com',
+];
+
+export function isDummyParticipant(p: Partial<Participant>): boolean {
+  const n = (p.name || '').toLowerCase().trim();
+  const e = (p.email || '').toLowerCase().trim();
+  if (DUMMY_NAMES.some((d) => n === d || n.includes(d))) return true;
+  if (DUMMY_EMAILS.some((d) => e === d)) return true;
+  return false;
+}
+
 export function getParticipants(): Participant[] {
   ensureDataDir();
   if (!fs.existsSync(PARTICIPANTS_FILE)) {
@@ -119,7 +144,8 @@ export function getParticipants(): Participant[] {
   }
   try {
     const raw = fs.readFileSync(PARTICIPANTS_FILE, 'utf-8');
-    return JSON.parse(raw);
+    const parsed: Participant[] = JSON.parse(raw);
+    return parsed.filter((p) => !isDummyParticipant(p));
   } catch {
     return [];
   }

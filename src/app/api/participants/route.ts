@@ -1,27 +1,49 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getParticipants, findParticipantByEmailOrPhone, deleteParticipant, clearAllParticipants, resetCertificateNumber, getNextCertificateNumber } from '@/lib/participants';
-import { fetchParticipantsFromGoogleSheet } from '@/lib/googleSheet';
+import {
+  getParticipants,
+  findParticipantByEmailOrPhone,
+  deleteParticipant,
+  clearAllParticipants,
+  resetCertificateNumber,
+  getNextCertificateNumber,
+  isDummyParticipant,
+  getSettings,
+} from '@/lib/participants';
+import { fetchParticipantsFromGoogleSheet, syncParticipantToGoogleSheet } from '@/lib/googleSheet';
 import { Participant } from '@/lib/types';
 
 export async function GET(req: NextRequest) {
   const search = req.nextUrl.searchParams.get('search');
   if (search) {
     const found = findParticipantByEmailOrPhone(search);
-    return NextResponse.json({ participant: found || null });
+    if (found && !isDummyParticipant(found)) {
+      return NextResponse.json({ participant: found });
+    }
+    return NextResponse.json({ participant: null });
   }
 
-  const localList = getParticipants();
+  const localList = getParticipants().filter((p) => !isDummyParticipant(p));
   let mergedList = localList;
 
   try {
     const sheetList = await fetchParticipantsFromGoogleSheet();
     if (sheetList && sheetList.length > 0) {
-      const map = new Map<string, Participant>();
-      localList.forEach((p) => map.set(p.id, p));
-      sheetList.forEach((p) => map.set(p.id, { ...(map.get(p.id) || {}), ...p }));
-      mergedList = Array.from(map.values()).sort(
-        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-      );
+      const sheetMap = new Map<string, Participant>();
+      sheetList.forEach((p) => {
+        if (p.id && !isDummyParticipant(p)) {
+          sheetMap.set(p.id, p);
+        }
+      });
+      // Hanya update metadata emailSent & whatsappSent dari Google Sheet untuk data resmi lokal
+      mergedList = localList.map((localP) => {
+        const fromSheet = sheetMap.get(localP.id);
+        if (!fromSheet) return localP;
+        return {
+          ...localP,
+          emailSent: localP.emailSent || fromSheet.emailSent,
+          whatsappSent: localP.whatsappSent || fromSheet.whatsappSent,
+        };
+      });
     }
   } catch (e) {
     console.error('Failed to merge Google Sheet participants:', e);
@@ -40,6 +62,27 @@ export async function POST(req: NextRequest) {
       const nextNumber = getNextCertificateNumber();
       return NextResponse.json({ success: true, nextCertificateNumber: nextNumber });
     }
+
+    if (body.action === 'sync-all-to-sheet') {
+      const participants = getParticipants().filter((p) => !isDummyParticipant(p));
+      const settings = getSettings();
+      let successCount = 0;
+      let failCount = 0;
+
+      for (const p of participants) {
+        const res = await syncParticipantToGoogleSheet(p, p.certUrl || '', settings);
+        if (res.success) successCount++;
+        else failCount++;
+      }
+
+      return NextResponse.json({
+        success: true,
+        total: participants.length,
+        synced: successCount,
+        failed: failCount,
+      });
+    }
+
     return NextResponse.json({ error: 'Unknown action' }, { status: 400 });
   } catch (error: unknown) {
     const err = error as Error;

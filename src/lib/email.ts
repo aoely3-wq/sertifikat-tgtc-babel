@@ -13,8 +13,9 @@ export async function sendCertificateEmail(params: {
   pdfBuffer: Buffer | Uint8Array;
   settings: CertificateSettings;
   certDownloadUrl: string;
+  isRevision?: boolean;
 }): Promise<SendEmailResult> {
-  const { participant, pdfBuffer, settings, certDownloadUrl } = params;
+  const { participant, pdfBuffer, settings, certDownloadUrl, isRevision } = params;
 
   // Cek apakah SMTP sudah dikonfigurasi
   const host = process.env.SMTP_HOST || settings.smtpHost || 'smtp.gmail.com';
@@ -51,14 +52,25 @@ export async function sendCertificateEmail(params: {
         <p>Direktorat Jenderal Perbendaharaan • Kanwil DJPb Provinsi Kepulauan Bangka Belitung</p>
       </div>
       <div class="content">
-        <span class="badge">Kuliah Umum Treasury Goes To Campus</span>
+        <span class="badge" style="${isRevision ? 'background-color: #fee2e2; color: #991b1b; border-color: #fca5a5;' : ''}">
+          ${isRevision ? '⚠️ Pembaruan Resmi Nomor e-Sertifikat' : 'Kuliah Umum Treasury Goes To Campus'}
+        </span>
         <h2 style="color: #0f2b5c; margin-top: 0; font-size: 20px;">Selamat, ${participant.name}!</h2>
+        
+        ${isRevision ? `
+        <div style="background-color: #fef2f2; border-left: 4px solid #ef4444; padding: 14px 16px; border-radius: 6px; margin: 16px 0; font-size: 13px; color: #991b1b; line-height: 1.5;">
+          <strong>Pemberitahuan Penertiban Sistem Penomoran:</strong><br>
+          Sehubungan dengan adanya penertiban penomoran dokumen e-sertifikat (nomor sebelumnya memiliki duplikasi nomor pada sistem: <em>${participant.oldCertNumber || '-'}</em>), panitia telah menerbitkan kembali <strong>e-Sertifikat Resmi Terbaru</strong> Anda dengan nomor unik resmi <strong>${participant.certNumber}</strong>. Mohon menggunakan dokumen e-Sertifikat terbaru yang dilampirkan pada email ini untuk keperluan administrasi/akademik Anda.
+        </div>
+        ` : `
         <p style="line-height: 1.6; font-size: 14px; color: #334155;">
           Terima kasih telah berpartisipasi aktif dalam rangkaian kegiatan <strong>${settings.eventTitle}</strong> yang diselenggarakan oleh <strong>${settings.organizer}</strong>.
         </p>
+        `}
 
         <div class="cert-box">
-          <p style="margin: 0 0 6px 0;"><strong>📜 Nomor Sertifikat:</strong> ${participant.certNumber}</p>
+          <p style="margin: 0 0 6px 0;"><strong>📜 Nomor Sertifikat ${isRevision ? 'Baru' : ''}:</strong> ${participant.certNumber}</p>
+          ${isRevision && participant.oldCertNumber ? `<p style="margin: 0 0 6px 0; color: #64748b; font-size: 12px;"><em>(Menggantikan nomor lama: ${participant.oldCertNumber})</em></p>` : ''}
           <p style="margin: 0 0 6px 0;"><strong>👤 Nama Penerima:</strong> ${participant.name}</p>
           ${participant.institution ? `<p style="margin: 0 0 6px 0;"><strong>🏛️ Instansi/Kampus:</strong> ${participant.institution}</p>` : ''}
           <p style="margin: 0;"><strong>📅 Tanggal Penerbitan:</strong> ${settings.eventDateText}</p>
@@ -110,7 +122,9 @@ export async function sendCertificateEmail(params: {
     const info = await transporter.sendMail({
       from,
       to: participant.email,
-      subject: `[e-Sertifikat Resmi] ${settings.eventTitle} - ${participant.name}`,
+      subject: isRevision
+        ? `[REVISI RESMI] e-Sertifikat Kuliah Umum TGTC DJPb Babel 2026 - ${participant.name}`
+        : `[e-Sertifikat Resmi] ${settings.eventTitle} - ${participant.name}`,
       html: htmlContent,
       attachments: [
         {

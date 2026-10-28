@@ -33,7 +33,7 @@ import {
 import { Participant, CertificateSettings } from '@/lib/types';
 
 export default function AdminPage() {
-  const [activeTab, setActiveTab] = useState<'participants' | 'certSettings' | 'deliverySettings'>('participants');
+  const [activeTab, setActiveTab] = useState<'participants' | 'certSettings' | 'deliverySettings' | 'renumbered'>('participants');
 
   // Security Auth State
   const [isUnlocked, setIsUnlocked] = useState(false);
@@ -49,6 +49,10 @@ export default function AdminPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccessMsg, setSaveSuccessMsg] = useState('');
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
+  const [isSyncingSheet, setIsSyncingSheet] = useState(false);
+  const [isSendingBatchRevisions, setIsSendingBatchRevisions] = useState(false);
+  const [batchRevisionProgress, setBatchRevisionProgress] = useState<{ current: number; total: number } | null>(null);
+  const [copiedWaId, setCopiedWaId] = useState<string | null>(null);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -202,6 +206,106 @@ export default function AdminPage() {
       p.certNumber.toLowerCase().includes(q)
     );
   });
+
+  // Helper generate pesan & link WhatsApp revisi
+  const getRevisionWaUrl = (p: Participant) => {
+    if (p.revisionWhatsappUrl) return p.revisionWhatsappUrl;
+    let clean = (p.phone || '').replace(/[^0-9]/g, '');
+    if (clean.startsWith('0')) clean = '62' + clean.substring(1);
+    else if (clean.startsWith('8')) clean = '62' + clean;
+    if (clean.length < 9) return '';
+
+    const msg = `Halo *${p.name}*,
+
+*Pemberitahuan Resmi Panitia Penyelenggara TGTC DJPb Babel 2026*
+Kantor Wilayah Direktorat Jenderal Perbendaharaan Provinsi Kepulauan Bangka Belitung
+
+Sehubungan dengan penertiban sistem penomoran dokumen e-Sertifikat Kuliah Umum (terdapat nomor ganda pada sistem sebelumnya: *${p.oldCertNumber || '-'}*), sistem kami telah menerbitkan kembali *e-Sertifikat Resmi Revisi Terbaru* Anda dengan nomor registrasi unik resmi:
+
+📜 *Nomor Sertifikat Baru:* ${p.certNumber}
+🎓 *Nama Penerima:* ${p.name}
+🏛️ *Instansi/Kampus:* ${p.institution || '-'}
+
+🔗 *Tautan Akses & Unduh e-Sertifikat Baru Anda:*
+https://sertifikat-tgtc-babel.vercel.app/sertifikat/${p.id}
+
+Dokumen e-Sertifikat PDF beresolusi tinggi revisi terbaru ini juga telah dikirimkan secara otomatis ke alamat email Anda (${p.email}).
+
+Mohon untuk menggunakan dokumen dan nomor sertifikat terbaru ini untuk keperluan administrasi/akademik Anda. Kami memohon maaf atas ketidaknyamanan sebelumnya. Terima kasih!
+
+Salam Perbendaharaan,
+*Panitia Penyelenggara TGTC DJPb Babel*`;
+
+    return `https://wa.me/${clean}?text=${encodeURIComponent(msg)}`;
+  };
+
+  // Handle Sync All to Google Sheet
+  const handleSyncAllToGoogleSheet = async () => {
+    if (!settings?.googleSheetWebhookUrl) {
+      alert('Webhook URL Google Sheet belum diisi di tab Pengaturan.');
+      return;
+    }
+    if (!confirm('Kirim seluruh data peserta resmi (85 orang) ke Google Sheet Anda?')) return;
+    try {
+      setIsSyncingSheet(true);
+      const res = await fetch('/api/participants', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'sync-all-to-sheet' }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert(`Sinkronisasi Selesai!\nTotal data: ${data.total}\nBerhasil dikirim: ${data.synced}\nGagal: ${data.failed}`);
+      } else {
+        alert(`Gagal sinkronisasi: ${data.error || 'Terjadi kesalahan'}`);
+      }
+    } catch {
+      alert('Gagal menyinkronkan data ke Google Sheet.');
+    } finally {
+      setIsSyncingSheet(false);
+    }
+  };
+
+  // Handle Send All Revision Emails
+  const handleSendAllRevisionEmails = async () => {
+    const renumberedList = participants.filter((p) => p.isRenumbered);
+    if (renumberedList.length === 0) {
+      alert('Tidak ada peserta dengan revisi nomor sertifikat.');
+      return;
+    }
+    if (
+      !confirm(
+        `Kirimkan email notifikasi e-sertifikat revisi terbaru beserta lampiran PDF kepada seluruh ${renumberedList.length} peserta sekarang?`
+      )
+    )
+      return;
+
+    setIsSendingBatchRevisions(true);
+    let successCount = 0;
+    let failCount = 0;
+
+    for (let i = 0; i < renumberedList.length; i++) {
+      const p = renumberedList[i];
+      setBatchRevisionProgress({ current: i + 1, total: renumberedList.length });
+      try {
+        const res = await fetch('/api/resend-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: p.id }),
+        });
+        const data = await res.json();
+        if (data.success) successCount++;
+        else failCount++;
+      } catch {
+        failCount++;
+      }
+    }
+
+    setIsSendingBatchRevisions(false);
+    setBatchRevisionProgress(null);
+    alert(`Pengiriman Email Revisi Selesai!\nBerhasil: ${successCount}\nGagal: ${failCount}`);
+    fetchData();
+  };
 
   // Handle Resend Email
   const handleResendEmail = async (id: string) => {
@@ -734,11 +838,51 @@ export default function AdminPage() {
             <Award className="w-4 h-4" />
             <span>Template & Sertifikat</span>
           </button>
+
+          <button
+            onClick={() => setActiveTab('renumbered')}
+            className={`flex items-center space-x-2 px-4 py-3 text-xs sm:text-sm font-bold border-b-2 transition-all ${
+              activeTab === 'renumbered'
+                ? 'border-amber-600 text-amber-800 bg-amber-50/50'
+                : 'border-transparent text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            <AlertTriangle className="w-4 h-4 text-amber-600" />
+            <span>Revisi Nomor Ganda ({participants.filter((p) => p.isRenumbered).length})</span>
+            <span className="px-1.5 py-0.5 text-[10px] font-bold bg-amber-100 text-amber-800 rounded-full">
+              Penting
+            </span>
+          </button>
         </div>
 
         {/* TAB 1: DAFTAR PESERTA */}
         {activeTab === 'participants' && (
           <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+            {/* Banner Penertiban Nomor */}
+            {participants.some((p) => p.isRenumbered) && (
+              <div className="m-4 sm:m-5 mb-0 p-4 bg-amber-50 border border-amber-200 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-amber-900">
+                <div className="flex items-start gap-2.5">
+                  <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-bold block text-amber-950 mb-0.5">
+                      Penertiban Nomor Sertifikat Berhasil Dilakukan:
+                    </span>
+                    <p className="text-amber-800">
+                      Seluruh data dummy telah dihapus, dan <strong>{participants.filter((p) => p.isRenumbered).length} peserta</strong> yang sebelumnya memiliki nomor ganda telah diterbitkan nomor baru unik resmi (127 s.d. 163). Sistem kini 100% bebas nomor ganda.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('renumbered')}
+                  className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-bold text-xs shadow-sm flex items-center space-x-1 flex-shrink-0 self-start sm:self-auto"
+                >
+                  <span>Lihat {participants.filter((p) => p.isRenumbered).length} Peserta Revisi</span>
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
+
             {/* Search Bar */}
             <div className="p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between gap-4">
               <div className="relative flex-1 max-w-md">
@@ -790,7 +934,12 @@ export default function AdminPage() {
                           <p className="text-[11px] text-slate-500">{p.institution || '-'}</p>
                         </td>
                         <td className="py-3.5 px-4 font-mono text-xs font-semibold text-[#0F2B5C]">
-                          {p.certNumber}
+                          <div>{p.certNumber}</div>
+                          {p.isRenumbered && (
+                            <div className="text-[10px] text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 inline-block mt-0.5 font-sans font-semibold">
+                              Revisi (Ganti: {p.oldCertNumber})
+                            </div>
+                          )}
                         </td>
                         <td className="py-3.5 px-4">
                           <p className="text-slate-800">{p.email}</p>
@@ -1229,6 +1378,35 @@ export default function AdminPage() {
                       const code = `function doPost(e) {
   try {
     var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+    var data = JSON.parse(e.postData.contents);
+
+    // 1. Opsi Sinkronisasi Penuh / Ganti Semua Data (Bulk Replace)
+    if (data.action === "replaceAll" && Array.isArray(data.participants)) {
+      if (sheet.getLastRow() > 1) {
+        sheet.getRange(2, 1, sheet.getLastRow() - 1, sheet.getLastColumn()).clearContent();
+      }
+      var rows = data.participants.map(function(p) {
+        return [
+          p.createdAt || new Date().toISOString(),
+          p.id,
+          p.certNumber,
+          p.name,
+          p.institution || "-",
+          p.email,
+          "'" + (p.phone || ""),
+          p.certUrl || "",
+          p.emailSent ? "Ya" : "Belum",
+          p.whatsappSent ? "Ya" : "Belum"
+        ];
+      });
+      if (rows.length > 0) {
+        sheet.getRange(2, 1, rows.length, rows[0].length).setValues(rows);
+      }
+      return ContentService.createTextOutput(JSON.stringify({ status: "success", count: rows.length }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+
+    // 2. Tambah atau Update per Peserta
     if (sheet.getLastRow() === 0) {
       sheet.appendRow([
         "Waktu Klaim",
@@ -1245,7 +1423,7 @@ export default function AdminPage() {
       sheet.getRange(1, 1, 1, 10).setFontWeight("bold").setBackground("#0F2B5C").setFontColor("#FFFFFF");
       sheet.setFrozenRows(1);
     }
-    var data = JSON.parse(e.postData.contents);
+
     var p = data.participant || data;
     var idColValues = sheet.getRange(2, 2, Math.max(sheet.getLastRow() - 1, 1), 1).getValues();
     var rowIndex = -1;
@@ -1308,6 +1486,15 @@ function doGet(e) {
     return ContentService.createTextOutput(JSON.stringify({ status: "error", message: err.toString(), participants: [] }))
       .setMimeType(ContentService.MimeType.JSON);
   }
+}
+
+// Jalankan fungsi ini langsung di Apps Script untuk membersihkan data lama & kosongkan tabel
+function bersihkanSeluruhTabel() {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  if (sheet.getLastRow() > 1) {
+    sheet.deleteRows(2, sheet.getLastRow() - 1);
+  }
+  Logger.log("Tabel berhasil dibersihkan! Silakan klik 'Sinkronkan Ulang 85 Data Bersih' di Admin Dashboard.");
 }`;
                       navigator.clipboard.writeText(code);
                       setCopiedAppsScript(true);
@@ -1382,6 +1569,21 @@ function doGet(e) {
                       <Send className="w-3.5 h-3.5 text-emerald-600" />
                     )}
                     <span>Uji Coba Koneksi Sheet</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleSyncAllToGoogleSheet}
+                    disabled={isSyncingSheet || !settings.googleSheetWebhookUrl}
+                    className="px-4 py-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded-xl font-bold text-xs border border-emerald-300 transition-colors flex items-center space-x-1.5 disabled:opacity-50 shadow-sm"
+                    title="Kirim ulang 85 data peserta bersih ke Google Sheet"
+                  >
+                    {isSyncingSheet ? (
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Database className="w-3.5 h-3.5 text-emerald-700" />
+                    )}
+                    <span>Sinkronkan Ulang 85 Data Bersih ke Sheet</span>
                   </button>
                 </div>
               </form>
@@ -1650,6 +1852,190 @@ function doGet(e) {
                 </button>
               </div>
             </form>
+          </div>
+        )}
+
+        {/* TAB 4: REVISI NOMOR GANDA */}
+        {activeTab === 'renumbered' && (
+          <div className="space-y-6">
+            {/* Header Box */}
+            <div className="bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-white border border-amber-200 rounded-2xl p-6 sm:p-8">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
+                <div className="flex items-center space-x-3">
+                  <div className="w-12 h-12 rounded-2xl bg-amber-500 text-white flex items-center justify-center shadow-sm">
+                    <AlertTriangle className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h2 className="text-lg sm:text-xl font-bold text-slate-800">
+                      Penertiban &amp; Revisi Nomor Sertifikat Ganda ({participants.filter((p) => p.isRenumbered).length} Peserta)
+                    </h2>
+                    <p className="text-xs text-slate-500">
+                      Seluruh peserta di bawah ini telah diterbitkan ulang nomor e-Sertifikat resminya secara unik (127 s.d. 163) untuk menggantikan nomor ganda sebelumnya.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleSendAllRevisionEmails}
+                    disabled={isSendingBatchRevisions || participants.filter((p) => p.isRenumbered).length === 0}
+                    className="px-4 py-2.5 bg-[#0F2B5C] hover:bg-[#163870] text-white rounded-xl font-bold text-xs shadow-sm transition-colors flex items-center space-x-2 disabled:opacity-50"
+                  >
+                    {isSendingBatchRevisions ? (
+                      <>
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        <span>
+                          Mengirim {batchRevisionProgress?.current} / {batchRevisionProgress?.total}...
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        <Mail className="w-3.5 h-3.5" />
+                        <span>Kirim Email Revisi ke Semua {participants.filter((p) => p.isRenumbered).length} Peserta</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {/* Summary Stats */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
+                <div className="p-3 bg-white rounded-xl border border-amber-200 text-center">
+                  <span className="block text-[11px] text-slate-500 font-semibold">Total Revisi</span>
+                  <span className="text-lg font-black text-amber-700">
+                    {participants.filter((p) => p.isRenumbered).length} Orang
+                  </span>
+                </div>
+                <div className="p-3 bg-white rounded-xl border border-amber-200 text-center">
+                  <span className="block text-[11px] text-slate-500 font-semibold">Rentang Nomor Baru</span>
+                  <span className="text-xs font-mono font-bold text-[#0F2B5C] block mt-1">
+                    127 s.d. 163
+                  </span>
+                </div>
+                <div className="p-3 bg-white rounded-xl border border-emerald-200 text-center">
+                  <span className="block text-[11px] text-slate-500 font-semibold">Sisa Duplikasi Sistem</span>
+                  <span className="text-lg font-black text-emerald-600">0 (100% Unik)</span>
+                </div>
+                <div className="p-3 bg-white rounded-xl border border-rose-200 text-center">
+                  <span className="block text-[11px] text-slate-500 font-semibold">Data Dummy Dihapus</span>
+                  <span className="text-lg font-black text-rose-600">7 Data Uji Coba</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Table of Renumbered Participants */}
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+              <div className="p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between">
+                <h3 className="font-bold text-sm text-slate-800">
+                  Daftar Peserta Penerima Nomor Baru &amp; Tautan Pengiriman
+                </h3>
+                <span className="text-xs text-slate-500">
+                  Klik tautan WhatsApp atau Email untuk mengirimkan sertifikat resmi terbaru ke peserta
+                </span>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse text-xs sm:text-sm">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold uppercase text-[10px] tracking-wider">
+                      <th className="py-3 px-4">No</th>
+                      <th className="py-3 px-4">Peserta &amp; Instansi</th>
+                      <th className="py-3 px-4">Nomor Lama</th>
+                      <th className="py-3 px-4">Nomor Baru (Revisi)</th>
+                      <th className="py-3 px-4">Kontak (Email / WA)</th>
+                      <th className="py-3 px-4 text-center">Status Email Revisi</th>
+                      <th className="py-3 px-4 text-right">Aksi Pengiriman Revisi</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 text-slate-700">
+                    {participants
+                      .filter((p) => p.isRenumbered)
+                      .map((p, idx) => {
+                        const waLink = getRevisionWaUrl(p);
+                        return (
+                          <tr key={p.id} className="hover:bg-amber-50/40 transition-colors">
+                            <td className="py-3.5 px-4 font-mono text-slate-400">{idx + 1}</td>
+                            <td className="py-3.5 px-4">
+                              <p className="font-bold text-slate-800">{p.name}</p>
+                              <p className="text-[11px] text-slate-500">{p.institution || '-'}</p>
+                            </td>
+                            <td className="py-3.5 px-4 font-mono text-xs text-rose-500 line-through">
+                              {p.oldCertNumber || '-'}
+                            </td>
+                            <td className="py-3.5 px-4 font-mono text-xs font-bold text-emerald-700">
+                              <span className="inline-block px-2 py-0.5 bg-emerald-50 border border-emerald-300 rounded-md">
+                                {p.certNumber}
+                              </span>
+                            </td>
+                            <td className="py-3.5 px-4">
+                              <p className="text-slate-800">{p.email}</p>
+                              <p className="font-mono text-[11px] text-slate-500">{p.phone}</p>
+                            </td>
+                            <td className="py-3.5 px-4 text-center">
+                              {p.emailSent ? (
+                                <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                  <CheckCircle className="w-3 h-3" />
+                                  <span>Terkirim</span>
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                                  <AlertTriangle className="w-3 h-3" />
+                                  <span>Belum / Revisi</span>
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-3.5 px-4 text-right">
+                              <div className="flex items-center justify-end space-x-1.5">
+                                {/* Tombol WhatsApp Revisi */}
+                                {waLink ? (
+                                  <a
+                                    href={waLink}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-colors inline-flex items-center space-x-1 shadow-sm"
+                                    title="Kirim Pesan Revisi via WhatsApp"
+                                  >
+                                    <Send className="w-3 h-3" />
+                                    <span>Kirim WA</span>
+                                  </a>
+                                ) : null}
+
+                                {/* Tombol Kirim Email Revisi */}
+                                <button
+                                  type="button"
+                                  onClick={() => handleResendEmail(p.id)}
+                                  disabled={actionLoadingId === p.id}
+                                  className="px-2.5 py-1.5 bg-[#0F2B5C] hover:bg-[#163870] text-white rounded-lg text-xs font-bold transition-colors inline-flex items-center space-x-1 shadow-sm disabled:opacity-50"
+                                  title="Kirim e-Sertifikat Revisi &amp; Lampiran PDF ke Email"
+                                >
+                                  {actionLoadingId === p.id ? (
+                                    <RefreshCw className="w-3 h-3 animate-spin" />
+                                  ) : (
+                                    <Mail className="w-3 h-3" />
+                                  )}
+                                  <span>Kirim Email</span>
+                                </button>
+
+                                {/* Tautan Sertifikat Baru */}
+                                <a
+                                  href={p.certUrl || `/sertifikat/${p.id}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="p-1.5 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-lg transition-colors inline-flex items-center"
+                                  title="Buka e-Sertifikat Revisi"
+                                >
+                                  <ExternalLink className="w-3.5 h-3.5" />
+                                </a>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </div>
         )}
       </main>

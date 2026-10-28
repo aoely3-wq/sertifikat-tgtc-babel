@@ -38,12 +38,14 @@ export async function POST(req: NextRequest) {
       pdfBuffer: pdfBytes,
       settings,
       certDownloadUrl: certUrl,
+      isRevision: participant.isRenumbered || false,
     });
 
     const updated = updateParticipant(participant.id, {
       emailSent: emailResult.success,
       emailSentAt: emailResult.success ? new Date().toISOString() : undefined,
       emailError: emailResult.error,
+      revisionEmailSent: participant.isRenumbered ? emailResult.success : undefined,
     });
 
     return NextResponse.json({

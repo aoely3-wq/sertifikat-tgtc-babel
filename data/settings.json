@@ -13,7 +13,7 @@
   "nameColor": "#0F2B5C",
   "certNumberPositionY": 35.4,
   "certNumberFormat": "P Sertifik-{SEQ}/WPB.10/2026",
-  "certNumberNext": 127,
+  "certNumberNext": 164,
   "certNumberStart": 72,
   "certNumberDigits": 3,
   "useCustomTemplate": true,

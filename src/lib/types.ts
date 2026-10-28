@@ -14,6 +14,15 @@ export interface Participant {
   whatsappError?: string;
   whatsappUrl?: string;
   downloadCount: number;
+  certUrl?: string;
+  // Pelacakan Revisi Nomor Ganda
+  oldCertNumber?: string;
+  isRenumbered?: boolean;
+  revisionWhatsappUrl?: string;
+  revisionEmailSent?: boolean;
+  revisionEmailSentAt?: string;
+  revisionWhatsappSent?: boolean;
+  revisionWhatsappSentAt?: string;
 }
 
 export interface CertificateSettings {
